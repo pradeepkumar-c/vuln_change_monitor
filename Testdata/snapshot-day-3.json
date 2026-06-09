@@ -1,0 +1,36 @@
+{
+"product_name": "ExampleDevice4",
+"product_version": "1.2.3",
+"source": "daily-vulnerability-scan",
+"snapshot_time": "2026-01-01T10:00:07Z",
+"findings": [
+        {
+        "vulnerability_id": "CVE-2024-1234567",
+        "component_name": "openssl",
+        "component_version": "1.1.1k",
+        "package_url": "pkg:generic/openssl@1.1.1k",
+        "severity": "high",
+        "cvss_score": 8.1,
+        "affected_status": "not_affected"
+        },
+        {
+        "vulnerability_id": "CVE-2024-12345678",
+        "component_name": "openssl",
+        "component_version": "1.1.1k",
+        "package_url": "pkg:generic/openssl@1.1.1k",
+        "severity": "medium",
+        "cvss_score": 8.1,
+        "affected_status": "not_affected"
+        },
+        {
+        "vulnerability_id": "CVE-2024-12345679",
+        "component_name": "openssl",
+        "component_version": "1.1.1k",
+        "package_url": "pkg:generic/openssl@1.1.1k",
+        "severity": "medium",
+        "cvss_score": 8.1,
+        "affected_status": "not_affected"
+        }
+
+    ]
+}
