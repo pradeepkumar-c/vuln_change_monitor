@@ -18,14 +18,14 @@ service:
     ports:
       - "8080:8080"
     environment:
-      - DB_HOST=localhost
+      - DB_HOST=db
       - DB_PORT=5432
       - DB_NAME=mydb
       - DB_USER=myuser
       - DB_PASSWORD=mypassword
       - PORT=8080
       - CONCURRENCY=4
-      - SPRING_PROFILES_ACTIVE=prod
     depends_on:
-      - db
+      db:
+        condition: service_healthy 
       

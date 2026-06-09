@@ -101,13 +101,13 @@ def validate_snapshot_data(data):
     # check for duplicates inside findings data, if same vulnerability_id, component_name and component_version exists more than once then reject with 400 Bad Request
     seen_findings = set()
     for finding in data['findings']:
-        finding_key = (finding['vulnerability_id'], finding['component_name'], finding['component_version'])
+        finding_key = (finding['vulnerability_id'].strip(), finding['component_name'].strip(), finding['component_version'].strip())
         if finding_key in seen_findings:
             return False, get_error_response_400(
                 "Invalid snapshot data",
                 "Vulnerability Snapshot Change Monitor",
                 field="findings",
-                field_message=f"Duplicate finding found in request data for vulnerability_id: {finding['vulnerability_id']}, component_name: {finding['component_name']} and component_version: {finding['component_version']}"
+                field_message=f"Duplicate finding found in request data for vulnerability_id: {finding['vulnerability_id'].strip()}, component_name: {finding['component_name'].strip()} and component_version: {finding['component_version'].strip()}"
             )
         seen_findings.add(finding_key)
 
@@ -161,19 +161,19 @@ def update_snapshot(data):
     return new_snapshot, existing_snapshot
 
 def add_new_finding(new_snapshot, finding_data):
-    print(f"Adding new finding for snapshot_id: {new_snapshot.snapshot_id} with vulnerability_id: {finding_data['vulnerability_id']}, component_name: {finding_data['component_name']} and component_version: {finding_data['component_version']}")
+    print(f"Adding new finding for snapshot_id: {new_snapshot.snapshot_id} with vulnerability_id: {finding_data['vulnerability_id'].strip()}, component_name: {finding_data['component_name'].strip()} and component_version: {finding_data['component_version'].strip()}")
     new_finding = Findings(
         finding_id=generate_uniqueid(),
         snapshot_id=new_snapshot.snapshot_id,
-        vulnerability_id=finding_data['vulnerability_id'],
-        component_name=finding_data['component_name'],
-        component_version=finding_data['component_version'],
+        vulnerability_id=finding_data['vulnerability_id'].strip(),
+        component_name=finding_data['component_name'].strip(),
+        component_version=finding_data['component_version'].strip(),
         package_url=finding_data['package_url'] if 'package_url' in finding_data else None,
         severity=finding_data['severity'] if 'severity' in finding_data else None,
         cvss_score=finding_data['cvss_score'] if 'cvss_score' in finding_data else None,
         affected_status=finding_data['affected_status'] if 'affected_status' in finding_data else None
     )
-    print(f"Adding new finding to the database for snapshot_id: {new_snapshot.snapshot_id} with vulnerability_id: {finding_data['vulnerability_id']}, component_name: {finding_data['component_name']} and component_version: {finding_data['component_version']}")
+    print(f"Adding new finding to the database for snapshot_id: {new_snapshot.snapshot_id} with vulnerability_id: {finding_data['vulnerability_id'].strip()}, component_name: {finding_data['component_name'].strip()} and component_version: {finding_data['component_version'].strip()}")
     db.session.add(new_finding)
     db.session.flush()
 
@@ -182,10 +182,10 @@ def add_snapshot_change(new_snapshot, existing_finding, finding_data, change_typ
         snapshot_id=new_snapshot.snapshot_id if new_snapshot else None,
         previous_snapshot_id=new_snapshot.previous_snapshot_id if new_snapshot else None,
         change_type=change_type,
-        vulnerability_id=finding_data['vulnerability_id'] if finding_data and 'vulnerability_id' in finding_data else existing_finding.vulnerability_id if existing_finding else None,
-        component_name=finding_data['component_name'] if finding_data and 'component_name' in finding_data else existing_finding.component_name if existing_finding else None,
-        component_version=finding_data['component_version'] if finding_data and 'component_version' in finding_data else existing_finding.component_version if existing_finding else None,
-        package_url=finding_data['package_url'] if finding_data and 'package_url' in finding_data else existing_finding.package_url if existing_finding else None,
+        vulnerability_id=finding_data['vulnerability_id'].strip() if finding_data and 'vulnerability_id' in finding_data else existing_finding.vulnerability_id.strip() if existing_finding else None,
+        component_name=finding_data['component_name'].strip() if finding_data and 'component_name' in finding_data else existing_finding.component_name.strip() if existing_finding else None,
+        component_version=finding_data['component_version'].strip() if finding_data and 'component_version' in finding_data else existing_finding.component_version.strip() if existing_finding else None,
+        package_url=finding_data['package_url'].strip() if finding_data and 'package_url' in finding_data else existing_finding.package_url.strip() if existing_finding else None,
         previous_severity=existing_finding.severity if existing_finding else None,
         current_severity=finding_data.get('severity') if finding_data else None,
         previous_cvss_score=existing_finding.cvss_score if existing_finding else None,
@@ -203,7 +203,7 @@ def get_resolved_findings_count(new_snapshot, existing_snapshot, findings_data):
         match_found = False
         # check each existing in finding_data, if not exists resolved count to be increased, if exists check if severity or status changed, if not changed then unchanged count to be increased
         for finding_data in findings_data:
-            if existing_finding.vulnerability_id == finding_data['vulnerability_id'] and existing_finding.component_name == finding_data['component_name'] and existing_finding.component_version == finding_data['component_version']:
+            if existing_finding.vulnerability_id == finding_data['vulnerability_id'].strip() and existing_finding.component_name == finding_data['component_name'].strip() and existing_finding.component_version == finding_data['component_version'].strip():
                 match_found = True
                 break
     

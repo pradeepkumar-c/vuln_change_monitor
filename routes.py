@@ -85,8 +85,16 @@ def get_snapshot_changes_endpoint(snapshot_id):
         limit = request.args.get('limit', 10, type=int)
         offset = request.args.get('offset', 0, type=int)
         changetype = request.args.get('change_type', None, type=str)
+        if changetype == "":
+            changetype = None
+
         severity = request.args.get('severity', None, type=str)
+        if severity == "":
+            severity = None
+
         component_name = request.args.get('component_name', None, type=str)
+        if component_name == "":
+            component_name = None
         
         response = get_snapshot_changes(snapshot_id, limit, offset, changetype, severity, component_name)
         return jsonify(response), 200
