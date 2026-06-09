@@ -29,10 +29,10 @@ Explanation:
 
 ```mermaid
 flowchart TB
-  Routes[Routes (routes.py)] --> ServiceComp[Service (service.py)]
-  ServiceComp --> Models[Models (model.py) - Snapshots/Findings/Changes]
+  Routes["Routes (routes.py)"] --> ServiceComp["Service (service.py)"]
+  ServiceComp --> Models["Models (model.py) - Snapshots/Findings/Changes"]
   Models --> DBComp[SQLAlchemy / Postgres]
-  Routes -->|error mapping| Errors[Error mapping (HTTP codes)]
+  Routes -->|error mapping| Errors["Error mapping (HTTP codes)"]
   ServiceComp -->|validation & diff| Validators[Validators & Helpers]
 ```
 
