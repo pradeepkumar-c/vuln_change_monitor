@@ -4,11 +4,8 @@ import time
 import uuid
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-
-allowed_severity = ['critical', 'high', 'medium', 'low', 'none', 'unknown']
-allowed_affected_status = ['affected', 'not_affected', 'fixed', 'under_investigation', 'accepted_risk']
-allowed_change_types = ['new', 'resolved', 'severity_changed', 'status_changed']
-allowed_cvss_score_range = (0.0, 10.0)
+from validator import validate_snapshot_data 
+from validator import allowed_severity, allowed_affected_status, allowed_cvss_score_range, allowed_change_types
 
 def create_snapshot(data):
     try:
@@ -93,53 +90,6 @@ def normalize_finding_input(finding):
     if 'component_version' in normalized_finding and isinstance(normalized_finding['component_version'], str):
         normalized_finding['component_version'] = normalized_finding['component_version'].strip()
     return normalized_finding
-
-def validate_snapshot_data(data):
-    print(f"Validating snapshot data")
-    required_fields = ['product_name', 'product_version', 'source', 'snapshot_time', 'findings']
-    for field in required_fields:
-        if field not in data or data[field] is None or data[field] == "":
-            print(f"Validation error: Missing required field: {field}")
-            return False, get_error_response_400("Invalid snapshot data", 
-                                                        "Vulnerability Snapshot Change Monitor",
-                                                        field=field,
-                                                        field_message=f"Missing required field in snapshot: {field}")
-
-    if not isinstance(data['findings'], list) or len(data['findings']) == 0:
-        print("Validation error: Findings must be a non-empty list")
-        return False, get_error_response_400("Invalid snapshot data", 
-                                                    "Vulnerability Snapshot Change Monitor",
-                                                    field="findings",
-                                                    field_message="Findings must be a non-empty list")
-
-    validate_snapshot_time_result = validate_snapshot_time(data['snapshot_time'])
-    if not validate_snapshot_time_result:
-        print(f"Validation error: Invalid snapshot_time format: {data['snapshot_time']}")
-        return False, get_error_response_400("Invalid snapshot data", 
-                                                    "Vulnerability Snapshot Change Monitor",
-                                                    field="snapshot_time",
-                                                    field_message="Invalid snapshot_time format, should be in ISO 8601 format, example: 2023-01-01T00:00:00Z")
-    
-    for finding in data['findings']:
-        valid, error = validate_finding_data(finding)
-        if not valid:
-            print(f"Validation error in finding data: {error}")
-            return False, error
-
-    # check for duplicates inside findings data, if same vulnerability_id, component_name and component_version exists more than once then reject with 400 Bad Request
-    seen_findings = set()
-    for finding in data['findings']:
-        finding_key = (finding['vulnerability_id'], finding['component_name'], finding['component_version'])
-        if finding_key in seen_findings:
-            return False, get_error_response_400(
-                "Invalid snapshot data",
-                "Vulnerability Snapshot Change Monitor",
-                field="findings",
-                field_message=f"Duplicate finding found in request data for vulnerability_id: {finding['vulnerability_id']}, component_name: {finding['component_name']} and component_version: {finding['component_version']}"
-            )
-        seen_findings.add(finding_key)
-
-    return True, None
 
 def update_snapshot(data):   
     existing_snapshot = get_existing_snapshot(data)
@@ -228,52 +178,74 @@ def add_snapshot_change(new_snapshot, existing_finding, finding_data, change_typ
     print(snapshot_change)
     db.session.add(snapshot_change)
 
-def get_resolved_findings_count(new_snapshot, existing_snapshot, findings_data):
-    existing_findings = Findings.query.filter_by(snapshot_id=existing_snapshot.snapshot_id).all()
-    resolved_count = 0
-    for existing_finding in existing_findings:
-        match_found = False
-        # check each existing in finding_data, if not exists resolved count to be increased, if exists check if severity or status changed, if not changed then unchanged count to be increased
-        for finding_data in findings_data:
-            if existing_finding.vulnerability_id == finding_data['vulnerability_id'] and existing_finding.component_name == finding_data['component_name'] and existing_finding.component_version == finding_data['component_version']:
-                match_found = True
-                break
-    
-        if not match_found:
-            resolved_count += 1
-            add_snapshot_change(new_snapshot, existing_finding, None, 'resolved')
-    return resolved_count
 
-# Update findings table and findings counts in snapshots table based on comparison with existing snapshot
+def get_existing_findings_by_snapshot(snapshot_id):
+    return Findings.query.filter_by(snapshot_id=snapshot_id).all()
+
 def update_findings(new_snapshot, existing_snapshot, findings_data):
+    new_map = {
+        (f['vulnerability_id'], f['component_name'], f['component_version']): f
+        for f in findings_data
+    }
+    print(f"New findings map created with {len(new_map)} entries for snapshot_id: {new_snapshot.snapshot_id}")
+
     if existing_snapshot:
-        print(f"Comparing findings with existing snapshot_id: {existing_snapshot.snapshot_id} for new snapshot_id: {new_snapshot.snapshot_id}")
-        for finding_data in findings_data:
-            existing_finding = get_existing_findings(finding_data, existing_snapshot.snapshot_id)
-            if existing_finding:
-                if existing_finding.severity != finding_data.get('severity'):
-                    new_snapshot.severity_changed += 1
-                    add_snapshot_change(new_snapshot, existing_finding, finding_data, 'severity_changed')
-                if existing_finding.affected_status != finding_data.get('affected_status'):
-                    new_snapshot.status_changed += 1
-                    add_snapshot_change(new_snapshot, existing_finding, finding_data, 'status_changed')
-                if existing_finding.severity == finding_data.get('severity') and existing_finding.affected_status == finding_data.get('affected_status'):
-                    new_snapshot.unchanged += 1
-            else:
+        print(f"Comparing with existing snapshot {existing_snapshot.snapshot_id}")
+
+        existing_findings = get_existing_findings_by_snapshot(existing_snapshot.snapshot_id)
+
+        old_map = {
+            (f.vulnerability_id, f.component_name, f.component_version): f
+            for f in existing_findings
+        }
+        print(f"Existing findings map created with {len(old_map)} entries for snapshot_id: {existing_snapshot.snapshot_id}")
+        # Process NEW + CHANGED + UNCHANGED
+        for key, new_fiding in new_map.items():
+            old_finding = old_map.get(key)
+            print(f"Processing finding with vulnerability_id: {new_fiding['vulnerability_id']}, component_name: {new_fiding['component_name']} and component_version: {new_fiding['component_version']}. Old finding exists: {'Yes' if old_finding else 'No'}")
+            if not old_finding:
+                # NEW
                 new_snapshot.new += 1
-                add_snapshot_change(new_snapshot, existing_finding, finding_data, 'new')
+                add_snapshot_change(new_snapshot, None, new_fiding, 'new')
+
+            else:
+                # Exists → compare fields
+                severity_changed = old_finding.severity != new_fiding.get('severity')
+                status_changed = old_finding.affected_status != new_fiding.get('affected_status')
+
+                if severity_changed:
+                    new_snapshot.severity_changed += 1
+                    add_snapshot_change(new_snapshot, old_finding, new_fiding, 'severity_changed')
+
+                if status_changed:
+                    new_snapshot.status_changed += 1
+                    add_snapshot_change(new_snapshot, old_finding, new_fiding, 'status_changed')
+
+                if not severity_changed and not status_changed:
+                    new_snapshot.unchanged += 1
+
             new_snapshot.finding_count += 1
-            add_new_finding(new_snapshot, finding_data)
-        
-        new_snapshot.resolved = get_resolved_findings_count(new_snapshot, existing_snapshot, findings_data)
+            add_new_finding(new_snapshot, new_fiding)
+
+        #  Process RESOLVED
+        for key, old_finding in old_map.items():
+            if key not in new_map:
+                new_snapshot.resolved += 1
+                add_snapshot_change(new_snapshot, old_finding, None, 'resolved')
+
     else:
-        print(f"No existing snapshot found, adding all findings as new for snapshot_id: {new_snapshot.snapshot_id}")
-        for finding_data in findings_data:
-            add_new_finding(new_snapshot, finding_data)
+        print(f"No existing snapshot, all findings are NEW")
+
+        for new_fiding in new_map.values():
             new_snapshot.new += 1
             new_snapshot.finding_count += 1
-            add_snapshot_change(new_snapshot, None, finding_data, 'new')
-    print(f"Updating snapshot counts for snapshot_id: {new_snapshot.snapshot_id} with new: {new_snapshot.new}, resolved: {new_snapshot.resolved}, severity_changed: {new_snapshot.severity_changed}, status_changed: {new_snapshot.status_changed} and unchanged: {new_snapshot.unchanged}")
+
+            add_new_finding(new_snapshot, new_fiding)
+            add_snapshot_change(new_snapshot, None, new_fiding, 'new')
+
+    print(f"Summary: new={new_snapshot.new}, resolved={new_snapshot.resolved}, "
+        f"severity_changed={new_snapshot.severity_changed}, "
+        f"status_changed={new_snapshot.status_changed}, unchanged={new_snapshot.unchanged}")
 
 def generate_uniqueid():
     return str(uuid.uuid4())
@@ -394,80 +366,6 @@ def get_snapshots(product_name, product_version, limit, offset):
 
     except Exception:
         raise
-
-
-def validate_finding_data(finding):
-    required_fields = ['vulnerability_id', 'component_name', 'component_version', 'severity', 'affected_status']
-
-    # Check Mandatory fields
-    for field in required_fields:
-        if field not in finding or finding[field] is None or finding[field] == "":
-            print(f"Validation error: Missing required field in finding: {field}")
-            return False, get_error_response_400("Invalid snapshot payload", 
-                                                        "Vulnerability Snapshot Change Monitor",
-                                                        field=field,
-                                                        field_message=f"Missing required field in finding: {field}")
-    # Check values in fields 
-    for field in finding:
-        # Severity check
-        if field == "severity" and finding[field] not in allowed_severity:
-            print(f"Validation error: Invalid severity value in finding: {finding[field]}")
-            return False, get_error_response_400("Invalid snapshot payload", 
-                                                        "Vulnerability Snapshot Change Monitor",
-                                                        field=field,
-                                                        field_message=f"Severity value should be: {', '.join(allowed_severity)}")
-        
-        # CVSS score check
-        if field == "cvss_score" and not validate_finding_cvss_score(finding[field]):
-            print(f"Validation error: Invalid CVSS score in finding: {finding[field]}")
-            return False, get_error_response_400("Invalid snapshot payload", 
-                                                "Vulnerability Snapshot Change Monitor",
-                                                field=field,
-                                                field_message=f"CVSS score should be in range: {allowed_cvss_score_range[0]} ~ {allowed_cvss_score_range[1]}")
-        
-        # Affected status check
-        if field == "affected_status" and finding[field] not in allowed_affected_status:
-            print(f"Validation error: Invalid affected status in finding: {finding[field]}")
-            return False, get_error_response_400("Invalid snapshot payload", 
-                                                "Vulnerability Snapshot Change Monitor",
-                                                field=field,
-                                                field_message=f"Affected status value should be in: {', '.join(allowed_affected_status)}")
-    return True, None
-
-def validate_finding_cvss_score(cvss_score):
-    try:
-        score = float(cvss_score)
-        return allowed_cvss_score_range[0] <= score <= allowed_cvss_score_range[1]
-    except (ValueError, TypeError) as e:
-        print(f"CVSS score validation error: {e}")
-        return False
-
-
-def validate_snapshot_time(snapshot_time):
-    try:
-        datetime.strptime(snapshot_time, '%Y-%m-%dT%H:%M:%SZ')
-        return True
-    except ValueError as e:
-        print(f"Snapshot time validation error: {e}")
-        return False
-    
-# Form only string as above structure for error response, if field is not applicable then return only code, message and details without field
-def get_error_response_400(message, details="Bad Request", field=None, field_message=None):
-    
-    error_details = details if isinstance(details, list) else [details]
-
-    if field and field_message:
-        error_details.append({
-            "field": field, 
-            "message": field_message
-        })
-
-    error_response = {
-        "code": "validation_error",
-        "message": message,
-        "details": error_details
-    }
-    return error_response
 
 class ValidationError(Exception):
     def __init__(self, error_body):

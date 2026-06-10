@@ -16,7 +16,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{DB_USER}:{DB_PASSWORD}@{
 app.json.sort_keys = False
 app.register_blueprint(bp)
 
-
 def db_init():
     try:
         with app.app_context():

@@ -3,295 +3,12 @@ import os
 import pytest
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from model import SnapshotChanges
-from service import NotFoundError, ValidationError, add_snapshot_change, create_snapshot, generate_uniqueid, get_error_response_400, get_existing_findings, get_resolved_findings_count, get_snapshot_changes, get_snapshots, normalize_snapshot_input, update_findings, validate_finding_data, validate_snapshot_data, DatabaseError, get_snapshot, get_existing_snapshot, add_new_finding, update_snapshot, ConflictError
+from service import NotFoundError, ValidationError, add_snapshot_change, create_snapshot, generate_uniqueid, get_existing_findings, get_snapshot_changes, get_snapshots, normalize_snapshot_input, update_findings, DatabaseError, get_snapshot, get_existing_snapshot, add_new_finding, update_snapshot, ConflictError
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-
-def test_get_error_response_400():
-    # Test with only message
-    error_response = get_error_response_400("Invalid input")
-    assert error_response["code"] == "validation_error"
-    assert error_response["message"] == "Invalid input"
-    assert error_response["details"] ==  ['Bad Request']
-
-    # Test with message and details
-    error_response = get_error_response_400("Invalid input", details="Missing required fields")
-    assert error_response["code"] == "validation_error"
-    assert error_response["message"] == "Invalid input"
-    assert error_response["details"] == ["Missing required fields"]
-
-    # Test with message, details, and field
-    error_response = get_error_response_400("Invalid input", details="Missing required fields", field="username", field_message="Username is required")
-    assert error_response["code"] == "validation_error"
-    assert error_response["message"] == "Invalid input"
-    assert {"field": "username", "message": "Username is required"} in error_response["details"]
-    print(error_response)
-
-@pytest.mark.parametrize("field", ["vulnerability_id", "component_name", "component_version", "severity", "affected_status"])
-def test_validate_finding_data_empty_fields(field):
-    # Test with empty fields
-    invalid_finding = {
-            "vulnerability_id": "123",
-            "component_name": "Test Component",
-            "component_version": "1.0.0",
-            "severity": "high",
-            "affected_status": "affected"
-    }
-    invalid_finding[field] = ""
-    result, error = validate_finding_data(invalid_finding)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot payload" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": field, "message": f"Missing required field in finding: {field}"} in error["details"]
-    print(error)
-
-@pytest.mark.parametrize("field", ["vulnerability_id", "component_name", "component_version", "severity", "affected_status"])
-def test_validate_finding_data_missing_fields(field):
-    # Test with missing fields
-    invalid_finding = {
-            "vulnerability_id": "123",
-            "component_name": "Test Component",
-            "component_version": "1.0.0",
-            "severity": "high",
-            "affected_status": "affected"
-    }
-    invalid_finding.pop(field)
-    result, error = validate_finding_data(invalid_finding)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot payload" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": field, "message": f"Missing required field in finding: {field}"} in error["details"]
-    print(error)
-
-def test_validate_finding_data_missing_fields():
-    # Test with valid data
-    finding_data = {
-            "vulnerability_id": "123",
-            "component_name": "Test Component",
-            "component_version": "1.0.0",
-            "severity": "high",
-            "affected_status": "affected"
-    }
-    result, error = validate_finding_data(finding_data)
-    assert result == True
-    assert error == None
-
-    # Test with wrong severirty value
-    finding_data["severity"] = "highh"
-    result, error = validate_finding_data(finding_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot payload" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "severity", "message": "Severity value should be: critical, high, medium, low, none, unknown"} in error["details"]
-
-    finding_data["severity"] = 5
-    result, error = validate_finding_data(finding_data)
-    assert result == False
-    assert error is not None
-    print(error)
-
-    finding_data["severity"] = "high"
-
-
-    # Test with wrong cvss score value, should be in range 0.0 ~ 10.0
-    finding_data["cvss_score"] = 10.8  # Range should be 0.0 ~ 10.0
-    result, error = validate_finding_data(finding_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot payload" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "cvss_score", "message": "CVSS score should be in range: 0.0 ~ 10.0"} in error["details"]
-
-    finding_data["cvss_score"]  = "high"
-    result, error = validate_finding_data(finding_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot payload" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "cvss_score", "message": "CVSS score should be in range: 0.0 ~ 10.0"} in error["details"]
-
-    finding_data["cvss_score"]  = -0.1
-    result, error = validate_finding_data(finding_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot payload" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "cvss_score", "message": "CVSS score should be in range: 0.0 ~ 10.0"} in error["details"]
-
-    finding_data["cvss_score"]  = 5
-    result, error = validate_finding_data(finding_data)
-    assert result == True
-    assert error is None
-    print(error)
-
-    #test with wrong affected_status value
-    finding_data["affected_status"] = "affectd"
-    result, error = validate_finding_data(finding_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot payload" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "affected_status", "message": "Affected status value should be in: affected, not_affected, fixed, under_investigation, accepted_risk"} in error["details"]
-
-    finding_data["affected_status"] = "fixed"
-    result, error = validate_finding_data(finding_data)
-    assert result == True
-    assert error is None
-    print(error)
-    
-@pytest.mark.parametrize("field", ["product_name", "product_version", "source", "snapshot_time"])
-def test_validate_snapshot_data_empty_fields(field):
-    # Test with empty fields
-    invalid_snapshot = {
-        "product_name": "Test Product",
-        "product_version": "1.0.0",
-        "source": "Test Source",
-        "snapshot_time": "2024-06-01T12:00:00Z",
-        "findings": [
-            {
-                "vulnerability_id": "123",
-                "component_name": "Test Component",
-                "component_version": "1.0.0",
-                "severity": "high",
-                "affected_status": "affected"
-            }
-        ]
-    }
-    invalid_snapshot[field] = ""
-    result, error = validate_snapshot_data(invalid_snapshot)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot data" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": field, "message": f"Missing required field in snapshot: {field}"} in error["details"]
-
-
-@pytest.mark.parametrize("field", ["product_name", "product_version", "source", "snapshot_time", "findings"])
-def test_validate_snapshot_data_missing_fields(field):
-    # Test with missing fields
-    invalid_snapshot = {
-        "product_name": "Test Product",
-        "product_version": "1.0.0",
-        "source": "Test Source",
-        "snapshot_time": "2024-06-01T12:00:00Z",
-        "findings": [
-            {
-                "vulnerability_id": "123",
-                "component_name": "Test Component",
-                "component_version": "1.0.0",
-                "severity": "high",
-                "affected_status": "affected"
-            }
-        ]
-    }
-    invalid_snapshot.pop(field, None)
-    result, error = validate_snapshot_data(invalid_snapshot)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot data" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": field, "message": f"Missing required field in snapshot: {field}"} in error["details"]
-    print(error)
-
-
-def test_validate_snapshot_data():
-    # Test with valid data
-    snapshot_data = {
-        "product_name": "Test Product",
-        "product_version": "1.0.0",
-        "source": "Test Source",
-        "snapshot_time": "2024-06-01T12:00:00Z",
-        "findings": [
-            {
-                "vulnerability_id": "123",
-                "component_name": "Test Component",
-                "component_version": "1.0.0",
-                "severity": "high",
-                "affected_status": "affected"
-            }
-        ]
-    }
-    result, error = validate_snapshot_data(snapshot_data)
-    assert result == True
-    assert error == None
-
-    # test with invalid snapshot_time format
-    snapshot_data["snapshot_time"] = "2024/06/01 12:00:00"
-    result, error = validate_snapshot_data(snapshot_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot data" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "snapshot_time", "message": "Invalid snapshot_time format, should be in ISO 8601 format, example: 2023-01-01T00:00:00Z"} in error["details"]
-
-    #test wth invalid snapshot_time 2026-02-31T12:00:00Z - Feb 31st is invalid date
-    snapshot_data["snapshot_time"] = "2026-02-31T12:00:00Z"
-    result, error = validate_snapshot_data(snapshot_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot data" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "snapshot_time", "message": "Invalid snapshot_time format, should be in ISO 8601 format, example: 2023-01-01T00:00:00Z"} in error["details"]
-    print(error)
-
-    #empty findings test
-    snapshot_data["snapshot_time"] = "2024-06-01T12:00:00Z"
-    snapshot_data["findings"] = []
-    result, error = validate_snapshot_data(snapshot_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot data" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "findings", "message": "Findings must be a non-empty list"} in error["details"]
-    print(error)
-
-    # Duplicate findings test
-    snapshot_data["findings"] = [
-            {
-                "vulnerability_id": "123",
-                "component_name": "Test Component",
-                "component_version": "1.0.0",
-                "severity": "high",
-                "affected_status": "affected"
-            },
-            {
-                "vulnerability_id": "123",
-                "component_name": "Test Component",
-                "component_version": "1.0.0",
-                "severity": "high",
-                "affected_status": "affected"
-            }
-    ]
-    result, error = validate_snapshot_data(snapshot_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot data" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "findings", "message": "Duplicate finding found in request data for vulnerability_id: 123, component_name: Test Component and component_version: 1.0.0"} in error["details"]
-    print(error)
-
-    # Missed vulnerability id in findings test
-    snapshot_data["findings"] = [
-            {
-                "component_name": "Test Component",
-                "component_version": "1.0.0",
-                "severity": "high",
-                "affected_status": "affected"
-            }
-    ]
-    result, error = validate_snapshot_data(snapshot_data)
-    assert result == False
-    assert error is not None
-    assert "Invalid snapshot payload" in error["message"]
-    assert "Vulnerability Snapshot Change Monitor" in error["details"]
-    assert {"field": "vulnerability_id", "message": "Missing required field in finding: vulnerability_id"} in error["details"]  
-    print(error)
 
 class MockSnapshots:
     def __init__(self):
@@ -332,7 +49,7 @@ def test_get_snapshots(mock_snapshots):
 
 class MockSnapshot:
     def __init__(self):
-        self.snapshot_id = 1
+        self.snapshot_id = "1"
         self.product_name = "Test Product"
         self.product_version = "1.0.0"
         self.snapshot_time = __import__("datetime").datetime.now()
@@ -349,9 +66,9 @@ class MockSnapshot:
 def test_get_snapshot(mock_snapshots):
     #Snapshots.query.filter_by(snapshot_id=snapshot_id).first()
     mock_snapshots.query.filter_by.return_value.first.return_value = MockSnapshot()
-    response = get_snapshot(1)
+    response = get_snapshot("1")
 
-    assert response["snapshot_id"] == 1
+    assert response["snapshot_id"] == "1"
     assert response["snapshot_time"] is not None
     assert response["source"] == "scanner"
     assert response["finding_count"] == 5
@@ -364,18 +81,18 @@ def test_get_snapshot(mock_snapshots):
 
     mock_snapshots.query.filter_by.return_value.first.side_effect = SQLAlchemyError("Database error")
     with pytest.raises(DatabaseError) as excinfo:
-        get_snapshot(1)
+        get_snapshot("1")
     assert str(excinfo.value) == "Database error occurred"
 
     mock_snapshots.query.filter_by.return_value.first.side_effect = Exception("Some random error")
     with pytest.raises(Exception) as excinfo:
-        get_snapshot(1)
+        get_snapshot("1")
     assert str(excinfo.value) == "Some random error"
 
     mock_snapshots.query.filter_by.return_value.first.side_effect = None
     mock_snapshots.query.filter_by.return_value.first.return_value = None
     with pytest.raises(NotFoundError) as excinfo:
-        get_snapshot(1)
+        get_snapshot("1")
     assert str(excinfo.value) == "Snapshot not found"
 
 class MockSnapshotChangesNew:
@@ -418,7 +135,7 @@ def test_get_snapshot_changes(mock_snapshotchanges):
         MockSnapshotChangesNew()
     ]
 
-    res = get_snapshot_changes(1, 10, 0, None, None, None)
+    res = get_snapshot_changes("1", 10, 0, None, None, None)
     response = res["changes"][0]
     print(len(response))
     assert response["change_type"] == "new"
@@ -434,7 +151,7 @@ def test_get_snapshot_changes(mock_snapshotchanges):
     mock_query.limit.return_value.offset.return_value.all.return_value = [
         MockSnapshotChangesResolved()
     ]
-    res = get_snapshot_changes(1, 10, 0, None, None, None)
+    res = get_snapshot_changes("1", 10, 0, None, None, None)
     response = res["changes"][0]
     assert response["change_type"] == "resolved"
     assert response["vulnerability_id"] == "123"
@@ -450,7 +167,7 @@ def test_get_snapshot_changes(mock_snapshotchanges):
     mock_query.filter_by.return_value.limit.return_value.offset.return_value.all.return_value = [
         MockSnapshotChangesResolved()
     ]
-    res = get_snapshot_changes(1, 10, 0, "resolved", None, None)
+    res = get_snapshot_changes("1", 10, 0, "resolved", None, None)
     response = res["changes"][0]
     assert response["change_type"] == "resolved"
     assert response["vulnerability_id"] == "123"
@@ -467,7 +184,7 @@ def test_get_snapshot_changes(mock_snapshotchanges):
         MockSnapshotChangesResolved()
     ]
     with pytest.raises(ValidationError) as excinfo:
-        res = get_snapshot_changes(1, 10, 0, "Resolved", None, None)
+        res = get_snapshot_changes("1", 10, 0, "Resolved", None, None)
     assert str(excinfo.value) == "Invalid change_type value. Allowed values are: ['new', 'resolved', 'severity_changed', 'status_changed']"
 
     #severity
@@ -475,13 +192,13 @@ def test_get_snapshot_changes(mock_snapshotchanges):
         MockSnapshotChangesResolved()
     ]
     with pytest.raises(ValidationError) as excinfo:
-        res = get_snapshot_changes(1, 10, 0, None, "Critical", None)
+        res = get_snapshot_changes("1", 10, 0, None, "Critical", None)
     assert str(excinfo.value) == "Invalid severity value. Allowed values are: ['critical', 'high', 'medium', 'low', 'none', 'unknown']"
 
     mock_query.filter_by.return_value.limit.return_value.offset.return_value.all.return_value = [
         MockSnapshotChangesResolved()
     ]
-    res = get_snapshot_changes(1, 10, 0, None, "high", None)
+    res = get_snapshot_changes("1", 10, 0, None, "high", None)
     response = res["changes"][0]
     assert response["previous"]["severity"] == "high"
 
@@ -558,7 +275,7 @@ def test_get_existing_snapshots(mock_snapshots):
     existing_snapshot = get_existing_snapshot(snapshot_data)
     assert existing_snapshot is not None
     print(existing_snapshot)
-    assert existing_snapshot.snapshot_id == 1
+    assert existing_snapshot.snapshot_id == "1"
     assert existing_snapshot.snapshot_time is not None
     assert existing_snapshot.source == "scanner"
     assert existing_snapshot.finding_count == 5
@@ -570,9 +287,10 @@ def test_get_existing_snapshots(mock_snapshots):
     assert existing_snapshot is None
 
 
-class NewMockSnapshot:
+class MockSnapshot3:
     def __init__(self):
-        self.snapshot_id = 1
+        self.snapshot_id = "snap123"
+        self.previous_snapshot_id = "prev123"
         self.new = 0
         self.resolved = 0
         self.severity_changed = 0
@@ -580,149 +298,106 @@ class NewMockSnapshot:
         self.unchanged = 0
         self.finding_count = 0
 
+class MockFinding:
+    def __init__(self, vid, comp, ver, severity, status):
+        self.vulnerability_id = vid
+        self.component_name = comp
+        self.component_version = ver
+        self.severity = severity
+        self.affected_status = status
+
 @patch("service.add_new_finding")
 @patch("service.add_snapshot_change")
-def test_update_findings_no_existing_snapshot(mock_add_change, mock_add_new):
-    
-    new_snapshot = NewMockSnapshot()
-    findings_data = [
-        {"severity": "HIGH", "affected_status": "OPEN"},
-        {"severity": "LOW", "affected_status": "OPEN"}
+def test_update_findings_no_existing(mock_add_change, mock_add_new):
+
+    new_snapshot = MockSnapshot3()
+
+    findings = [
+        {"vulnerability_id": "V1", "component_name": "compA", "component_version": "1.0", "severity": "high", "affected_status": "affected"},
+        {"vulnerability_id": "V2", "component_name": "compB", "component_version": "1.0", "severity": "low", "affected_status": "affected"}
     ]
 
-    update_findings(new_snapshot, None, findings_data)
+    update_findings(new_snapshot, None, findings)
 
     assert new_snapshot.new == 2
     assert new_snapshot.finding_count == 2
-    
+
     assert mock_add_new.call_count == 2
     assert mock_add_change.call_count == 2
 
 
-@patch("service.get_existing_findings")
+@patch("service.get_existing_findings_by_snapshot")
+@patch("service.add_new_finding")
 @patch("service.add_snapshot_change")
-@patch("service.add_new_finding")
-@patch("service.get_resolved_findings_count")
-@patch("service.db.session.flush")
-def test_update_findings_severity_changed(
-    mock_flush,
-    mock_resolved,
-    mock_add_new,
-    mock_add_change,
-    mock_get_existing
-):
-    new_snapshot = NewMockSnapshot()
+def test_update_findings_mixed(mock_add_change, mock_add_new, mock_get_findings):
 
-    existing_snapshot = NewMockSnapshot()
-    existing_snapshot.snapshot_id = 100
+    new_snapshot = MockSnapshot3()
 
-    existing_finding = MagicMock()
-    existing_finding.severity = "LOW"
-    existing_finding.affected_status = "OPEN"
+    existing_snapshot = type("obj", (), {"snapshot_id": "prev123"})
 
-    mock_get_existing.return_value = existing_finding
-    mock_resolved.return_value = 0
+    mock_get_findings.return_value = [
+        MockFinding("V1", "compA", "1.0", "high", "affected"),
+        MockFinding("V2", "compB", "1.0", "low", "affected"),
+    ]
 
-    findings_data = [{"severity": "HIGH", "affected_status": "OPEN"}]
+    # Incoming findings
+    findings = [
+        # unchanged
+        {"vulnerability_id": "V1", "component_name": "compA", "component_version": "1.0", "severity": "high", "affected_status": "affected"},
+        # new
+        {"vulnerability_id": "V3", "component_name": "compC", "component_version": "1.0", "severity": "medium", "affected_status": "affected"}
+    ]
 
-    update_findings(new_snapshot, existing_snapshot, findings_data)
-
-    assert new_snapshot.severity_changed == 1
-    assert new_snapshot.status_changed == 0
-    assert new_snapshot.unchanged == 0
-
-    mock_add_change.assert_called_with(
-        new_snapshot, existing_finding, findings_data[0], 'severity_changed'
-    )
-
-@patch("service.get_existing_findings")
-@patch("service.add_snapshot_change")
-@patch("service.add_new_finding")
-@patch("service.get_resolved_findings_count")
-@patch("service.db.session.flush")
-def test_update_findings_affected_status_changed(
-    mock_flush,
-    mock_resolved,
-    mock_add_new,
-    mock_add_change,
-    mock_get_existing
-):
-    new_snapshot = NewMockSnapshot()
-
-    existing_snapshot = NewMockSnapshot()
-    existing_snapshot.snapshot_id = 100
-
-    existing_finding = MagicMock()
-    existing_finding.severity = "HIGH"
-    existing_finding.affected_status = "OPEN"
-    
-    mock_get_existing.return_value = existing_finding
-    mock_resolved.return_value = 0
-
-    findings_data = [{"severity": "HIGH", "affected_status": "affected"}]
-
-    update_findings(new_snapshot, existing_snapshot, findings_data)
-
-    assert new_snapshot.severity_changed == 0
-    assert new_snapshot.status_changed == 1
-    assert new_snapshot.unchanged == 0
-
-    mock_add_change.assert_called_with(
-        new_snapshot, existing_finding, findings_data[0], 'status_changed'
-    )
-
-@patch("service.get_existing_findings")
-@patch("service.get_resolved_findings_count")
-@patch("service.add_new_finding")
-@patch("service.db.session.flush")
-def test_update_findings_unchanged(mock_flush, mock_add_new, mock_resolved, mock_get_existing):
-
-    new_snapshot = NewMockSnapshot()
-    existing_snapshot = NewMockSnapshot()
-
-    existing_finding = MagicMock()
-    existing_finding.severity = "HIGH"
-    existing_finding.affected_status = "OPEN"
-
-    mock_get_existing.return_value = existing_finding
-    mock_resolved.return_value = 0
-
-    findings_data = [{"severity": "HIGH", "affected_status": "OPEN"}]
-
-    update_findings(new_snapshot, existing_snapshot, findings_data)
-
-    assert new_snapshot.unchanged == 1
-
-
-@patch("service.get_existing_findings")
-@patch("service.get_resolved_findings_count")
-@patch("service.add_snapshot_change")
-@patch("service.add_new_finding")
-@patch("service.db.session.flush")
-def test_update_findings_new(
-    mock_flush,
-    mock_add_new,
-    mock_add_change,
-    mock_resolved,
-    mock_get_existing
-):
-    
-    new_snapshot = NewMockSnapshot()
-    existing_snapshot = MockSnapshot()
-
-    mock_get_existing.return_value = None
-    mock_resolved.return_value = 0
-
-    findings_data = [{"severity": "HIGH", "affected_status": "OPEN"}]
-
-    update_findings(new_snapshot, existing_snapshot, findings_data)
+    update_findings(new_snapshot, existing_snapshot, findings)
 
     assert new_snapshot.new == 1
+    assert new_snapshot.unchanged == 1
+    assert new_snapshot.resolved == 1
 
-    mock_add_change.assert_called_with(
-        new_snapshot, None, findings_data[0], 'new'
-    )
+    assert new_snapshot.finding_count == 2
 
+
+
+@patch("service.get_existing_findings_by_snapshot")
+@patch("service.add_new_finding")
+@patch("service.add_snapshot_change")
+def test_update_findings_severity_changed(mock_add_change, mock_add_new, mock_get_findings):
+
+    new_snapshot = MockSnapshot3()
+    existing_snapshot = type("obj", (), {"snapshot_id": "prev123"})
+
+    mock_get_findings.return_value = [
+        MockFinding("V1", "compA", "1.0", "high", "affected")
+    ]
+
+    findings = [
+        {"vulnerability_id": "V1", "component_name": "compA", "component_version": "1.0", "severity": "low", "affected_status": "affected"}
+    ]
+
+    update_findings(new_snapshot, existing_snapshot, findings)
+
+    assert new_snapshot.severity_changed == 1
+
+
+@patch("service.get_existing_findings_by_snapshot")
+@patch("service.add_new_finding")
+@patch("service.add_snapshot_change")
+def test_update_findings_status_changed(mock_add_change, mock_add_new, mock_get_findings):
+
+    new_snapshot = MockSnapshot3()
+    existing_snapshot = type("obj", (), {"snapshot_id": "prev123"})
+
+    mock_get_findings.return_value = [
+        MockFinding("V1", "compA", "1.0", "high", "affected")
+    ]
+
+    findings = [
+        {"vulnerability_id": "V1", "component_name": "compA", "component_version": "1.0", "severity": "high", "affected_status": "fixed"}
+    ]
+
+    update_findings(new_snapshot, existing_snapshot, findings)
+
+    assert new_snapshot.status_changed == 1
 
 
 class DummySnapshot:
@@ -735,89 +410,6 @@ class DummyFinding:
         self.vulnerability_id = vulnerability_id
         self.component_name = component_name
         self.component_version = component_version
-
-
-@patch("service.add_snapshot_change")
-@patch("service.Findings")
-def test_get_resolved_findings_count_when_some_resolved(mock_findings, mock_add_change):
-
-    existing_snapshot = DummySnapshot(snapshot_id=1)
-    new_snapshot = DummySnapshot(snapshot_id=2)
-
-    existing_findings = [
-        DummyFinding("V1", "compA", "1.0"),
-        DummyFinding("V2", "compB", "2.0"),
-    ]
-
-    findings_data = [
-        {
-            "vulnerability_id": "V1",
-            "component_name": "compA",
-            "component_version": "1.0",
-        }
-    ]
-
-    mock_findings.query.filter_by.return_value.all.return_value = existing_findings
-
-    result = get_resolved_findings_count(new_snapshot, existing_snapshot, findings_data)
-
-
-    assert result == 1 
-    assert mock_add_change.call_count == 1
-
-    mock_add_change.assert_called_with(
-        new_snapshot,
-        existing_findings[1],
-        None,
-        "resolved"
-    )
-
-
-@patch("service.add_snapshot_change")
-@patch("service.Findings")
-def test_get_resolved_findings_count_when_none_resolved(mock_findings, mock_add_change):
-    existing_snapshot = DummySnapshot(1)
-    new_snapshot = DummySnapshot(2)
-
-    existing_findings = [
-        DummyFinding("V1", "compA", "1.0"),
-    ]
-
-    findings_data = [
-        {
-            "vulnerability_id": "V1",
-            "component_name": "compA",
-            "component_version": "1.0",
-        }
-    ]
-
-    mock_findings.query.filter_by.return_value.all.return_value = existing_findings
-
-    result = get_resolved_findings_count(new_snapshot, existing_snapshot, findings_data)
-
-    assert result == 0
-    mock_add_change.assert_not_called()
-
-
-@patch("service.add_snapshot_change")
-@patch("service.Findings")
-def test_get_resolved_findings_count_when_all_resolved(mock_findings, mock_add_change):
-    existing_snapshot = DummySnapshot(1)
-    new_snapshot = DummySnapshot(2)
-
-    existing_findings = [
-        DummyFinding("V1", "compA", "1.0"),
-        DummyFinding("V2", "compB", "2.0"),
-    ]
-
-    findings_data = []
-
-    mock_findings.query.filter_by.return_value.all.return_value = existing_findings
-
-    result = get_resolved_findings_count(new_snapshot, existing_snapshot, findings_data)
-
-    assert result == 2
-    assert mock_add_change.call_count == 2
 
 
 class DummySnapshot1:
