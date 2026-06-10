@@ -154,28 +154,29 @@ def add_new_finding(new_snapshot, finding_data):
     print(f"Adding new finding to the database for snapshot_id: {new_snapshot.snapshot_id} with vulnerability_id: {finding_data['vulnerability_id']}, component_name: {finding_data['component_name']} and component_version: {finding_data['component_version']}")
     db.session.add(new_finding)
 
-def add_snapshot_change(new_snapshot, existing_finding, finding_data, change_type):
-    #Print all values below whichwe are adding
-    print(f"Adding snapshot change for snapshot_id: {new_snapshot.snapshot_id if new_snapshot else 'None'}, previous_snapshot_id: {new_snapshot.previous_snapshot_id if new_snapshot else 'None'}, change_type: {change_type}, vulnerability_id: {finding_data['vulnerability_id'] if finding_data and 'vulnerability_id' in finding_data else existing_finding.vulnerability_id if existing_finding else 'None'}, component_name: {finding_data['component_name'] if finding_data and 'component_name' in finding_data else existing_finding.component_name if existing_finding else 'None'}, component_version: {finding_data['component_version'] if finding_data and 'component_version' in finding_data else existing_finding.component_version if existing_finding else 'None'}, package_url: {finding_data['package_url'] if finding_data and 'package_url' in finding_data else existing_finding.package_url if existing_finding and existing_finding.package_url else 'None'}, previous_severity: {existing_finding.severity if existing_finding else 'None'}, current_severity: {finding_data.get('severity') if finding_data else 'None'}, previous_cvss_score: {existing_finding.cvss_score if existing_finding else 'None'}, current_cvss_score: {finding_data.get('cvss_score') if finding_data else 'None'}, previous_affected_status: {existing_finding.affected_status if existing_finding else 'None'}, current_affected_status: {finding_data.get('affected_status') if finding_data else 'None'}")
-
-    #Note: In case of resolved finding data will be None, So need to fill from existsing finding, In case of new finding existing_finding will be None so need to fill from finding_data, In case of severity_changed or status_changed both finding_data and existing_finding will have values but need to take respective fields from each 
+def add_snapshot_change(new_snapshot, previous, current, change_type):
+    def _get(src, name):
+        if src is None:
+            return None
+        if isinstance(src, dict):
+            return src.get(name)
+        return getattr(src, name, None)
 
     snapshot_change = SnapshotChanges(
         snapshot_id=new_snapshot.snapshot_id if new_snapshot else None,
         previous_snapshot_id=new_snapshot.previous_snapshot_id if new_snapshot else None,
         change_type=change_type,
-        vulnerability_id=finding_data['vulnerability_id'] if finding_data and 'vulnerability_id' in finding_data else existing_finding.vulnerability_id if existing_finding else None,
-        component_name=finding_data['component_name'] if finding_data and 'component_name' in finding_data else existing_finding.component_name if existing_finding else None,
-        component_version=finding_data['component_version'] if finding_data and 'component_version' in finding_data else existing_finding.component_version if existing_finding else None,
-        package_url=finding_data['package_url'] if finding_data and 'package_url' in finding_data else existing_finding.package_url if existing_finding and existing_finding.package_url else None,
-        previous_severity=existing_finding.severity if existing_finding else None,
-        current_severity=finding_data.get('severity') if finding_data else None,
-        previous_cvss_score=existing_finding.cvss_score if existing_finding else None,
-        current_cvss_score=finding_data.get('cvss_score') if finding_data else None,
-        previous_affected_status=existing_finding.affected_status if existing_finding else None,
-        current_affected_status=finding_data.get('affected_status') if finding_data else None
+        vulnerability_id=_get(current, 'vulnerability_id') or _get(previous, 'vulnerability_id'),
+        component_name=_get(current, 'component_name') or _get(previous, 'component_name'),
+        component_version=_get(current, 'component_version') or _get(previous, 'component_version'),
+        package_url=_get(current, 'package_url') or _get(previous, 'package_url'),
+        previous_severity=_get(previous, 'severity'),
+        current_severity=_get(current, 'severity'),
+        previous_cvss_score=_get(previous, 'cvss_score'),
+        current_cvss_score=_get(current, 'cvss_score'),
+        previous_affected_status=_get(previous, 'affected_status'),
+        current_affected_status=_get(current, 'affected_status')
     )
-    print(snapshot_change)
     db.session.add(snapshot_change)
 
 

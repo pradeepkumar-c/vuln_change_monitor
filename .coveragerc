@@ -3,3 +3,4 @@ omit =
     */Test/*
     */test_*
     */__init__.py
+     */conftest.py

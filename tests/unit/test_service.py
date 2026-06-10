@@ -3,7 +3,7 @@ import os
 import pytest
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from model import SnapshotChanges
-from service import NotFoundError, ValidationError, add_snapshot_change, create_snapshot, generate_uniqueid, get_existing_findings, get_snapshot_changes, get_snapshots, normalize_snapshot_input, update_findings, DatabaseError, get_snapshot, get_existing_snapshot, add_new_finding, update_snapshot, ConflictError
+from service import NotFoundError, ValidationError, add_snapshot_change, create_snapshot, generate_uniqueid, get_existing_findings, get_snapshot_changes, get_snapshots, normalize_finding_input, normalize_snapshot_input, update_findings, DatabaseError, get_snapshot, get_existing_snapshot, add_new_finding, update_snapshot, ConflictError
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 
@@ -860,26 +860,26 @@ def test_normalize_snapshot_input_basic():
     assert result["source"] == "scanner"
 
 def test_normalize_finding_inside_snapshot():
-    payload = {
-        "product_name": "prodA",
-        "product_version": "1.0",
-        "source": "scanner",
-        "findings": [
-            {
+    findings ={
                 "vulnerability_id": " V1 ",
                 "component_name": " compA ",
                 "component_version": " 1.0 "
             }
-        ]
-    }
+    
+    result = normalize_finding_input(findings)
+    assert result["vulnerability_id"] == "V1"
+    assert result["component_name"] == "compA"
+    assert result["component_version"] == "1.0"
 
-    result = normalize_snapshot_input(payload)
-
-    finding = result["findings"][0]
-
-    assert finding["vulnerability_id"] == "V1"
-    assert finding["component_name"] == "compA"
-    assert finding["component_version"] == "1.0"
+    findings ={
+                "vulnerability_id": 2,
+                "component_name": 23,
+                "component_version": 46
+            }
+    result = normalize_finding_input(findings)
+    assert result["vulnerability_id"] == 2
+    assert result["component_name"] == 23
+    assert result["component_version"] == 46
 
 
 def test_original_input_not_modified():
