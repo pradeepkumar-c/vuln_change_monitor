@@ -25,6 +25,11 @@ def db_init():
     except Exception as e:
         print(f"Error initializing database: {e}")
 
+
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    db.session.remove()
+
 if __name__ == '__main__':
     db_init()
     app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)

@@ -3,7 +3,7 @@ import os
 import pytest
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from model import SnapshotChanges
-from service import NotFoundError, ValidationError, add_snapshot_change, create_snapshot, generate_uniqueid, get_error_response_400, get_existing_findings, get_resolved_findings_count, get_snapshot_changes, get_snapshots, update_findings, validate_finding_data, validate_snapshot_data, DatabaseError, get_snapshot, get_existing_snapshot, add_new_finding, update_snapshot, ConflictError
+from service import NotFoundError, ValidationError, add_snapshot_change, create_snapshot, generate_uniqueid, get_error_response_400, get_existing_findings, get_resolved_findings_count, get_snapshot_changes, get_snapshots, normalize_snapshot_input, update_findings, validate_finding_data, validate_snapshot_data, DatabaseError, get_snapshot, get_existing_snapshot, add_new_finding, update_snapshot, ConflictError
 from unittest.mock import MagicMock, patch
 from datetime import datetime
 
@@ -582,8 +582,7 @@ class NewMockSnapshot:
 
 @patch("service.add_new_finding")
 @patch("service.add_snapshot_change")
-@patch("service.db.session.flush")
-def test_update_findings_no_existing_snapshot(mock_flush, mock_add_change, mock_add_new):
+def test_update_findings_no_existing_snapshot(mock_add_change, mock_add_new):
     
     new_snapshot = NewMockSnapshot()
     findings_data = [
@@ -598,7 +597,6 @@ def test_update_findings_no_existing_snapshot(mock_flush, mock_add_change, mock_
     
     assert mock_add_new.call_count == 2
     assert mock_add_change.call_count == 2
-    mock_flush.assert_called_once()
 
 
 @patch("service.get_existing_findings")
@@ -847,10 +845,10 @@ def test_add_snapshot_change_with_finding_data(mock_snapshot_changes, mock_db):
     existing_finding = DummyExistingFinding()
 
     finding_data = {
-        "vulnerability_id": " V1_new ",
-        "component_name": " compA_new ",
-        "component_version": " 2.0 ",
-        "package_url": " pkg://new ",
+        "vulnerability_id": "V1_new",
+        "component_name": "compA_new",
+        "component_version": "2.0",
+        "package_url": "pkg://new",
         "severity": "CRITICAL",
         "cvss_score": 9.5,
         "affected_status": "not_affected"
@@ -878,7 +876,7 @@ def test_add_snapshot_change_with_finding_data(mock_snapshot_changes, mock_db):
     )
 
     mock_db.session.add.assert_called_once_with(mock_instance)
-    mock_db.session.flush.assert_called_once()
+
 
 
 @patch("service.db")
@@ -890,6 +888,7 @@ def test_add_snapshot_change_without_finding_data(mock_snapshot_changes, mock_db
 
     mock_instance = MagicMock()
     mock_snapshot_changes.return_value = mock_instance
+
 
     add_snapshot_change(new_snapshot, existing_finding, None, "resolved")
 
@@ -910,7 +909,7 @@ def test_add_snapshot_change_without_finding_data(mock_snapshot_changes, mock_db
     )
 
     mock_db.session.add.assert_called_once()
-    mock_db.session.flush.assert_called_once()
+
 
 
 @patch("service.db")
@@ -953,7 +952,7 @@ def test_add_snapshot_change_with_no_existing_finding(mock_snapshot_changes, moc
     )
 
     mock_db.session.add.assert_called_once()
-    mock_db.session.flush.assert_called_once()
+
 
 
 @patch("service.db")
@@ -964,9 +963,9 @@ def test_add_new_finding_with_all_fields(mock_generate_id, mock_findings, mock_d
     new_snapshot = DummySnapshot(10)
 
     finding_data = {
-        "vulnerability_id": " V1 ",
-        "component_name": " compA ",
-        "component_version": " 1.0 ",
+        "vulnerability_id": "V1",
+        "component_name": "compA",
+        "component_version": "1.0",
         "package_url": "pkg://abc",
         "severity": "HIGH",
         "cvss_score": 7.5,
@@ -992,7 +991,7 @@ def test_add_new_finding_with_all_fields(mock_generate_id, mock_findings, mock_d
     )
 
     mock_db.session.add.assert_called_once_with(mock_instance)
-    mock_db.session.flush.assert_called_once()
+
 
 
 class DummySnapshot2:
@@ -1041,9 +1040,9 @@ def test_update_snapshot_newer_exists_conflict(mock_get_existing):
 def test_update_snapshot_success(mock_get_existing, mock_generate_id, mock_snapshots, mock_db):
 
     data = {
-        "product_name": " prodA ",
-        "product_version": " 1.0 ",
-        "source": " scanner ",
+        "product_name": "prodA",
+        "product_version": "1.0",
+        "source": "scanner",
         "snapshot_time": "2025-06-01T10:00:00Z"
     }
 
@@ -1095,7 +1094,6 @@ def test_update_snapshot_no_existing(mock_get_existing, mock_generate_id, mock_s
     mock_instance = MagicMock()
     mock_snapshots.return_value = mock_instance
 
-    # Act
     new_snapshot, existing_snapshot = update_snapshot(data)
 
     args = mock_snapshots.call_args[1]
@@ -1129,9 +1127,9 @@ def test_create_snapshot_success(
 
     new_snapshot = MagicMock()
     new_snapshot.snapshot_id = "123"
-    new_snapshot.product_name = "prodA"
-    new_snapshot.product_version = "1.0"
-    new_snapshot.source = "scanner"
+    new_snapshot.product_name = " prodA "
+    new_snapshot.product_version = " 1.0 "
+    new_snapshot.source = " scanner "
     new_snapshot.snapshot_time = datetime(2025, 6, 1, 10, 0, 0)
     new_snapshot.finding_count = 5
     new_snapshot.new = 1
@@ -1238,9 +1236,9 @@ def test_create_snapshot_generic_exception(
 
     mock_db.session.rollback.assert_called_once()
 
-def test_generate_uniqueid_returns_int():
+def test_generate_uniqueid_returns_string():
     result = generate_uniqueid()
-    assert isinstance(result, int)
+    assert isinstance(result, str)
 
 def test_generate_uniqueid_returns_unique_values():
     id1 = generate_uniqueid()
@@ -1248,14 +1246,60 @@ def test_generate_uniqueid_returns_unique_values():
 
     assert id1 != id2
 
-@patch("service.uuid.uuid4")
-@patch("service.time.time")
-def test_generate_uniqueid_deterministic(mock_time, mock_uuid):
-    mock_time.return_value = 1000  # seconds
-    mock_uuid_obj = MagicMock()
-    mock_uuid_obj.int = 12345
-    mock_uuid.return_value = mock_uuid_obj
 
-    expected = 1000000 + 345
-    result = generate_uniqueid()
-    assert result == expected
+def test_normalize_snapshot_input_basic():
+    payload = {
+        "product_name": "  prodA  ",
+        "product_version": " 1.0 ",
+        "source": " scanner ",
+        "findings": [
+            {
+                "vulnerability_id": "V1",
+                "component_name": "compA",
+                "component_version": "1.0"
+            }
+        ]
+    }
+
+    result = normalize_snapshot_input(payload)
+    
+    assert result["product_name"] == "prodA"
+    assert result["product_version"] == "1.0"
+    assert result["source"] == "scanner"
+
+def test_normalize_finding_inside_snapshot():
+    payload = {
+        "product_name": "prodA",
+        "product_version": "1.0",
+        "source": "scanner",
+        "findings": [
+            {
+                "vulnerability_id": " V1 ",
+                "component_name": " compA ",
+                "component_version": " 1.0 "
+            }
+        ]
+    }
+
+    result = normalize_snapshot_input(payload)
+
+    finding = result["findings"][0]
+
+    assert finding["vulnerability_id"] == "V1"
+    assert finding["component_name"] == "compA"
+    assert finding["component_version"] == "1.0"
+
+
+def test_original_input_not_modified():
+    payload = {
+        "product_name": " prodA ",
+        "product_version": "1.0",
+        "source": "scanner",
+        "findings": []
+    }
+
+    original = payload.copy()
+
+    normalize_snapshot_input(payload)
+    assert payload["product_name"] == original["product_name"]
+

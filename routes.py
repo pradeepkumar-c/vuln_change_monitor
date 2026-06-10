@@ -58,9 +58,9 @@ def get_snapshots_endpoint(product_name, product_version):
         return jsonify({"error": "Unexpected server error"}), 500
 
 # GET /snapshots/{snapshot_id}
-@bp.route('/snapshots/<int:snapshot_id>', methods=['GET'])
+@bp.route('/snapshots/<string:snapshot_id>', methods=['GET'])
 def get_snapshot_endpoint(snapshot_id):
-
+    print(f"Received request for snapshot_id: {snapshot_id}")
     try:
         response = get_snapshot(snapshot_id)
         return jsonify(response), 200
@@ -78,10 +78,9 @@ def get_snapshot_endpoint(snapshot_id):
         return jsonify({"error": "Unexpected server error"}), 500
 
 # GET /snapshots/{snapshot_id}/changes
-@bp.route('/snapshots/<int:snapshot_id>/changes', methods=['GET'])
+@bp.route('/snapshots/<string:snapshot_id>/changes', methods=['GET'])
 def get_snapshot_changes_endpoint(snapshot_id):
     try:
-    
         limit = request.args.get('limit', 10, type=int)
         offset = request.args.get('offset', 0, type=int)
         changetype = request.args.get('change_type', None, type=str)

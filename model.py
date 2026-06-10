@@ -1,17 +1,16 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
-db = SQLAlchemy()
-
+db = SQLAlchemy(session_options={"expire_on_commit": True})
 class Snapshots(db.Model):
     __tablename__ = 'snapshots'
-    snapshot_id = db.Column(db.BigInteger, primary_key=True)
+    snapshot_id = db.Column(db.String(36), primary_key=True)
     product_name = db.Column(db.String(80), nullable=False)
     product_version = db.Column(db.String(80), nullable=False)
     source = db.Column(db.String(80), nullable=False)
     snapshot_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    previous_snapshot_id = db.Column(db.BigInteger, nullable=True)
+    previous_snapshot_id = db.Column(db.String(36), nullable=True)
     finding_count = db.Column(db.Integer, nullable=False, default=0)
     new = db.Column(db.Integer, nullable=False, default=0)
     resolved = db.Column(db.Integer, nullable=False, default=0)
@@ -27,8 +26,8 @@ class Snapshots(db.Model):
 
 class Findings(db.Model):
     __tablename__ = 'findings'
-    finding_id = db.Column(db.BigInteger, primary_key=True)
-    snapshot_id = db.Column(db.BigInteger, db.ForeignKey('snapshots.snapshot_id'), nullable=False)
+    finding_id = db.Column(db.String(36), primary_key=True)
+    snapshot_id = db.Column(db.String(36), db.ForeignKey('snapshots.snapshot_id'), nullable=False)
     vulnerability_id = db.Column(db.String(80), nullable=False)
     component_name = db.Column(db.String(80), nullable=False)
     component_version = db.Column(db.String(80), nullable=False)
@@ -43,9 +42,9 @@ class Findings(db.Model):
 
 class SnapshotChanges(db.Model):
     __tablename__ = 'snapshot_changes'
-    change_id = db.Column(db.Integer, primary_key=True)
-    snapshot_id = db.Column(db.BigInteger, db.ForeignKey('snapshots.snapshot_id'), nullable=False)
-    previous_snapshot_id = db.Column(db.BigInteger, nullable=True)
+    change_id = db.Column(db.BigInteger, primary_key=True)
+    snapshot_id = db.Column(db.String(36), db.ForeignKey('snapshots.snapshot_id'), nullable=False)
+    previous_snapshot_id = db.Column(db.String(36), nullable=True)
     change_type = db.Column(db.Enum('new', 'resolved', 'severity_changed', 'status_changed', name='change_type_enum'), nullable=False)
     vulnerability_id = db.Column(db.String(80), nullable=True)
     component_name = db.Column(db.String(80), nullable=True)
