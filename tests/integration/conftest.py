@@ -1,3 +1,4 @@
+
 import pytest
 from testcontainers.postgres import PostgresContainer
 from app import app, db
@@ -11,23 +12,6 @@ def postgres_container():
 
 @pytest.fixture(scope="session")
 def test_app(postgres_container):
-    # Configure app to use container DB
-    app.config["SQLALCHEMY_DATABASE_URI"] = postgres_container.get_connection_url()
-    app.config["TESTING"] = True
-
-    with app.app_context():
-        db.create_all()
-        yield app
-        db.drop_all()
-
-
-@pytest.fixture
-def client(test_app):
-    return test_app.test_client()
-
-@pytest.fixture(scope="session")
-def test_app(postgres_container):
-
     app.config["SQLALCHEMY_DATABASE_URI"] = postgres_container.get_connection_url()
     app.config["TESTING"] = True
 
@@ -39,3 +23,8 @@ def test_app(postgres_container):
 
         db.session.remove()
         db.drop_all()
+
+
+@pytest.fixture
+def client(test_app):
+    return test_app.test_client()

@@ -7,8 +7,10 @@ This repository implements a Flask-based service that ingests vulnerability snap
 - `routes.py`: HTTP route handlers and mapping of domain exceptions to HTTP status codes.
 - `service.py`: Business logic for validation, diff computation, persistence helpers, and read/query helpers.
 - `model.py`: SQLAlchemy models for `Snapshots`, `Findings`, and `SnapshotChanges`.
+- `validator.py`: Validates the json data received.
 - `Dockerfile` / `Docker-compose.yml`: Container image and compose configuration for app + Postgres.
-- `Test/`: Unit tests (pytest). Add integration tests here.
+- `tests/unit`: Unit tests (pytest)
+- `tests/integration`: Integration tests here.
 - `Testdata/`: Example snapshot JSON payloads used for tests.
 
 ## Endpoints
@@ -21,7 +23,7 @@ This repository implements a Flask-based service that ingests vulnerability snap
 | GET | `/snapshots/{snapshot_id}/changes` | List change rows for a snapshot. Supports `change_type`, `severity`, `component_name`, plus `limit`/`offset`. |
 | GET | `/health` | Health check. Returns an object with at least `status` (recommendation: `{"status":"ok"}`). |
 
-Note: This implementation treats `source` as part of snapshot identity and ordering. Accepted snapshots are chosen per `product_name`, `product_version`, and `source` (this is an explicit project assumption to keep scans from different ingestion sources isolated). Document or change this behavior if you prefer ordering across sources.
+Note: This implementation treats `source` as part of snapshot identity and ordering. Accepted snapshots are chosen per `product_name`, `product_version`, and `source` (this is an explicit project assumption to keep scans from different ingestion sources isolated).
 
 ## Build and run with Docker / docker-compose
 
@@ -59,15 +61,6 @@ Run tests in Docker (if image includes test deps):
 docker-compose run --rm app pytest -q
 ```
 
-## Concurrency guidance (short)
+## Concurrency guidance
 
-- Recommended: process-level concurrency (one process per worker). Use a production WSGI server (e.g. `gunicorn -w <workers> -b 0.0.0.0:8080 app:app`) or run multiple container replicas.
-- Avoid spawning subprocesses or multiprocessing inside the request path for snapshot ingestion because:
-  - DB sessions and transactions do not safely span child processes.
-  - Complexity around connection pools and transactional integrity increases.
-- Threading: Flask can serve multiple threads, but for CPU-heavy work or to avoid GIL contention, prefer process workers.
-
-## What to add next
-- Add integration tests (SQLite in-memory or test Postgres) for the core scenarios described in `Requirement.MD`.
-- Add DB migration scripts (Alembic) to manage schema changes in production environments.
-
+- We avoid threading/multiprocessing because it complicates database transactions. Concurrency is handled by the server (e.g., Gunicorn workers), which is simpler and safer.

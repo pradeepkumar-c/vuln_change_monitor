@@ -1,4 +1,4 @@
-service:
+services:
   db:
     image: postgres:latest
     environment:
