@@ -42,7 +42,6 @@ docker-compose up --build
 Environment variables (see `docker-compose.yml` for defaults):
 - `DATABASE_URL` - SQLAlchemy DB URL
 - `FLASK_ENV` - `development` or `production`
-- `CONCURRENCY` - # of worker processes to run (recommend using process manager/gunicorn)
 
 ## Run tests
 
@@ -60,7 +59,137 @@ Run tests in Docker (if image includes test deps):
 ```
 docker-compose run --rm app pytest -q
 ```
+## Example Usage
+1. Snapsshot creation
+```
+curl -i -X POST http://localhost:8080/snapshots -H "Content-Type: application/json" -d @Testdata/snapshot-day-4.json
 
+HTTP/1.1 201 CREATED
+Server: Werkzeug/3.1.8 Python/3.11.15
+Date: Thu, 18 Jun 2026 04:10:34 GMT
+Content-Type: application/json
+Content-Length: 388
+Connection: close
+
+{
+  "snapshot_id": "6aeaa0d1-2f12-40c2-a01d-88c0bac5254d",
+  "product_name": "ExampleDevice7",
+  "product_version": "1.2.3.5",
+  "source": "daily-vulnerability-scan",
+  "snapshot_time": "2026-01-01T12:00:10",
+  "finding_count": 3,
+  "previous_snapshot_id": null,
+  "summary": {
+    "new": 3,
+    "resolved": 0,
+    "severity_changed": 0,
+    "status_changed": 0,
+    "unchanged": 0
+  }
+}
+```
+2.Getting snapshot status
+```
+curl -i -X GET http://localhost:8080/snapshots/6aeaa0d1-2f12-40c2-a01d-88c0bac5254d/changes
+
+HTTP/1.1 200 OK
+Server: Werkzeug/3.1.8 Python/3.11.15
+Date: Thu, 18 Jun 2026 04:14:54 GMT
+Content-Type: application/json
+Content-Length: 1096
+Connection: close
+
+{
+  "changes": [
+    {
+      "change_type": "new",
+      "vulnerability_id": "CVE-2024-12345678",
+      "component_name": "openssl",
+      "component_version": "1.1.1k",
+      "package_url": "pkg:generic/openssl@1.1.1k",
+      "previous": null,
+      "current": {
+        "severity": "medium",
+        "cvss_score": 7.1,
+        "affected_status": "not_affected"
+      }
+    },
+    {
+      "change_type": "new",
+      "vulnerability_id": "CVE-2024-12345679",
+      "component_name": "openssl",
+      "component_version": "1.1.1k",
+      "package_url": "pkg:generic/openssl@1.1.1k",
+      "previous": null,
+      "current": {
+        "severity": "low",
+        "cvss_score": 8.1,
+        "affected_status": "not_affected"
+      }
+    },
+    {
+      "change_type": "new",
+      "vulnerability_id": "CVE-2024-123456791",
+      "component_name": "openssl",
+      "component_version": "1.1.1k",
+      "package_url": "pkg:generic/openssl@1.1.1k",
+      "previous": null,
+      "current": {
+        "severity": "low",
+        "cvss_score": 8.1,
+        "affected_status": "affected"
+      }
+    }
+  ]
+}
+```
+3. Getting specfic changes of snapshot
+```
+curl -i -X GET http://localhost:8080/products/ExampleDevice7/versions/1.2.3.5/snapshots
+
+HTTP/1.1 200 OK
+Server: Werkzeug/3.1.8 Python/3.11.15
+Date: Thu, 18 Jun 2026 04:17:51 GMT
+Content-Type: application/json
+Content-Length: 289
+Connection: close
+
+{
+  "items": [
+    {
+      "snapshot_id": "6aeaa0d1-2f12-40c2-a01d-88c0bac5254d",
+      "snapshot_time": "2026-01-01T12:00:10",
+      "source": "daily-vulnerability-scan",
+      "finding_count": 3,
+      "created_at": "2026-06-18T04:10:33.989765"
+    }
+  ],
+  "offset": 0,
+  "limit": 10
+}
+```
+4. Health check
+```
+curl.exe -i -X GET http://localhost:8080/health
+
+HTTP/1.1 200 OK
+Server: Werkzeug/3.1.8 Python/3.11.15
+Date: Thu, 18 Jun 2026 04:19:12 GMT
+Content-Type: application/json
+Content-Length: 41
+Connection: close
+
+{
+  "status": "ok",
+  "database": "ok"
+}
+```
 ## Concurrency guidance
 
 - We avoid threading/multiprocessing because it complicates database transactions. Concurrency is handled by the server (e.g., Gunicorn workers), which is simpler and safer.
+
+
+## Database Optimization
+
+Indexes were added based on query patterns to optimize snapshot lookup,
+diff computation, and change filtering operations.

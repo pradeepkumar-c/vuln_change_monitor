@@ -23,6 +23,10 @@ class Snapshots(db.Model):
         db.UniqueConstraint(
             'product_name', 'product_version',  'source', 'snapshot_time', name='unique_snapshot'
         ),
+        db.Index(
+            'idx_snapshots_lookup', 'product_name',  'product_version', 'source', 'snapshot_time'
+        )
+
     )
 
 
@@ -40,12 +44,13 @@ class Findings(db.Model):
     __table_args__ = (
         db.CheckConstraint('cvss_score >= 0.0 AND cvss_score <= 10.0', name='cvss_score_range'),
         db.UniqueConstraint('snapshot_id', 'vulnerability_id', 'component_name', 'component_version', name='unique_finding'),
+        db.Index('idx_findings_match_key', 'vulnerability_id','component_name', 'component_version'  ),
     )
 
 class SnapshotChanges(db.Model):
     __tablename__ = 'snapshot_changes'
     change_id = db.Column(db.BigInteger, primary_key=True)
-    snapshot_id = db.Column(UUID(as_uuid=True), db.ForeignKey('snapshots.snapshot_id'), nullable=False)
+    snapshot_id = db.Column(UUID(as_uuid=True), db.ForeignKey('snapshots.snapshot_id'), nullable=False, index=True)
     previous_snapshot_id = db.Column(UUID(as_uuid=True), nullable=True)
     change_type = db.Column(db.Enum('new', 'resolved', 'severity_changed', 'status_changed', name='change_type_enum'), nullable=False)
     vulnerability_id = db.Column(db.String(80), nullable=True)
@@ -59,3 +64,7 @@ class SnapshotChanges(db.Model):
     previous_affected_status = db.Column(db.Enum('affected', 'not_affected', 'fixed', 'under_investigation', 'accepted_risk', name='affected_status_enum'), nullable=True)
     current_affected_status = db.Column(db.Enum('affected', 'not_affected', 'fixed', 'under_investigation', 'accepted_risk', name='affected_status_enum'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (
+                db.Index('idx_changes_filters','snapshot_id', 'change_type', 'current_severity', 'component_name'),
+        )
+

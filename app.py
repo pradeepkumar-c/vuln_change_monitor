@@ -10,7 +10,6 @@ DB_NAME = os.getenv('DB_NAME', 'mydb')
 DB_USER = os.getenv('DB_USER', 'myuser')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'mypassword')
 PORT = os.getenv('PORT', 8080)
-CONCURRENCY = os.getenv('CONCURRENCY', 4)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=disable'
 app.json.sort_keys = False
