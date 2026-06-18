@@ -166,7 +166,7 @@ The schema enforces:
 - **Unique Constraint** on `snapshots`: `(product_name, product_version, source, snapshot_time)` — Prevents exact duplicates
 - **Unique Constraint** on `findings`: `(snapshot_id, vulnerability_id, component_name, component_version)` — Prevents finding duplicates within a snapshot
 - **Check Constraint** on `findings.cvss_score`: Must be between 0.0 and 10.0
-- **Indices** on common filter columns for performance
+- **Indix** Indexes were added based on query patterns to optimize snapshot lookup, diff computation, and change filtering operations.
 
 ### Resetting the Database
 
@@ -374,48 +374,20 @@ The service is **conditionally idempotent**:
 
 2. **No Query Result Size Limits**: `limit` and `offset` parameters have no server-enforced maximums. Large result sets could cause performance issues.
 
-3. **No Connection Pooling Configuration**: Database connections are managed by SQLAlchemy's default pool. High concurrency may exhaust connections.
+3. **Concurrency guidance**: We avoid threading/multiprocessing because it complicates database transactions. Concurrency is handled by the server (e.g., Gunicorn workers), which is simpler and safer.
 
-4. **No Request Logging to DB**: API requests/responses are logged only to stdout, not persisted.
+4. **No Connection Pooling Configuration**: Database connections are managed by SQLAlchemy's default pool. High concurrency may exhaust connections.
 
-5. **No Audit Trail**: Who/what changed data is not tracked. Only `created_at` timestamp is recorded.
+5. **No Request Logging to DB**: API requests/responses are logged only to stdout, not persisted.
 
-6. **No Rate Limiting**: No request rate limiting or throttling. Clients can flood the API.
+6. **No Audit Trail**: Who/what changed data is not tracked. Only `created_at` timestamp is recorded.
 
-7. **No Snapshot Expiration**: Old snapshots are never deleted. Storage grows indefinitely.
+7. **No Rate Limiting**: No request rate limiting or throttling. Clients can flood the API.
 
-8. **Minimal Error Details**: Error responses include generic messages, not detailed stack traces (by design for security).
+8. **No Snapshot Expiration**: Old snapshots are never deleted. Storage grows indefinitely.
 
+9. **Minimal Error Details**: Error responses include generic messages, not detailed stack traces (by design for security).
 
----
-
-## What Would Be Improved with More Time
-
-1. **Alembic Migrations**
-   - Version-controlled schema migrations
-   - Ability to apply/rollback schema changes safely in production
-   - Prevents manual SQL and schema drift issues
-
-2. **Comprehensive Integration Tests**
-   - End-to-end tests for all API endpoints
-   - Scenarios: first snapshot, mixed diffs, double-changes, duplicates, out-of-order
-   - Contract tests to ensure API responses match spec
-   - Performance benchmarks for large snapshots
-
-3. **Connection Pooling Tuning**
-   - Optimize SQLAlchemy pool size for production workload
-   - Monitor pool exhaustion and recycle strategies
-   - Load test with expected concurrency
-
-4. **Request/Response Logging to Database**
-   - Audit trail of all API calls
-   - Timestamp, user/IP, request/response payload, latency
-   - Query via `/audit-logs` endpoint for debugging
-
-5. **Query Result Size Limits**
-   - Server-enforced `max_limit` (e.g., 1000 items)
-   - Prevent accidental large result sets
-   - Clear error message when limit exceeded
 
 
 ## API Endpoints
@@ -641,13 +613,3 @@ GET /health
 | `testdata/` | Example snapshot JSON payloads for manual testing |
 | `docs/` | Additional documentation (architecture, requirements, service structure) |
 
-
-## Concurrency guidance
-
-- We avoid threading/multiprocessing because it complicates database transactions. Concurrency is handled by the server (e.g., Gunicorn workers), which is simpler and safer.
-
-
-## Database Optimization
-
-Indexes were added based on query patterns to optimize snapshot lookup,
-diff computation, and change filtering operations.
