@@ -541,33 +541,32 @@ GET /snapshots/6aeaa0d1-2f12-40c2-a01d-88c0bac5254d
 
 **Example**:
 ```bash
-GET /snapshots/6aeaa0d1-2f12-40c2-a01d-88c0bac5254d/changes?change_type=new&limit=20
+GET /snapshots/cd431977-861a-4bb5-a9cf-91f9b633eb3f/changes?change_type=severity_changed&limit=20&offset=0
 ```
 
 **Response (200 OK)**:
 ```json
+
 {
   "changes": [
     {
-      "change_id": 1,
-      "snapshot_id": "6aeaa0d1-2f12-40c2-a01d-88c0bac5254d",
-      "change_type": "new",
-      "vulnerability_id": "CVE-2024-12345",
+      "change_type": "severity_changed",
+      "vulnerability_id": "CVE-2024-12345679",
       "component_name": "openssl",
       "component_version": "1.1.1k",
       "package_url": "pkg:generic/openssl@1.1.1k",
-      "previous_severity": null,
-      "current_severity": "high",
-      "previous_cvss_score": null,
-      "current_cvss_score": 8.1,
-      "previous_affected_status": null,
-      "current_affected_status": "affected",
-      "created_at": "2026-01-01T10:05:00Z"
+      "previous": {
+        "severity": "low",
+        "cvss_score": 8.1,
+        "affected_status": "not_affected"
+      },
+      "current": {
+        "severity": "high",
+        "cvss_score": 8.1,
+        "affected_status": "not_affected"
+      }
     }
-  ],
-  "total_count": 1,
-  "limit": 20,
-  "offset": 0
+  ]
 }
 ```
 
@@ -582,14 +581,8 @@ GET /health
 **Response (200 OK)**:
 ```json
 {
-  "status": "ok"
-}
-```
-
-**Error Response (500 Internal Server Error)**:
-```json
-{
-  "error": "Database connection failed"
+  "status": "ok",
+  "database": "ok"
 }
 ```
 
